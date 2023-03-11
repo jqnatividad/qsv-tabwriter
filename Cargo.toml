@@ -16,10 +16,10 @@ unicode-width = "0.1"
 lazy_static =  { version = "1", optional = true}
 
 [dependencies.regex]
-version = "1.6"
+version = "1.7"
 optional = true
 default-features = false
-features = ["std"]
+features = ["std", "perf"]
 
 [features]
 default = []
