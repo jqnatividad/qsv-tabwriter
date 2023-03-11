@@ -143,7 +143,7 @@ impl<W: io::Write> TabWriter<W> {
     /// then it is padded with spaces.
     ///
     /// The default minimum width is `2`.
-    pub fn minwidth(mut self, minwidth: usize) -> TabWriter<W> {
+    pub const fn minwidth(mut self, minwidth: usize) -> TabWriter<W> {
         self.minwidth = minwidth;
         self
     }
@@ -154,7 +154,7 @@ impl<W: io::Write> TabWriter<W> {
     /// separation.
     ///
     /// The default padding is `2`.
-    pub fn padding(mut self, padding: usize) -> TabWriter<W> {
+    pub const fn padding(mut self, padding: usize) -> TabWriter<W> {
         self.padding = padding;
         self
     }
@@ -162,7 +162,7 @@ impl<W: io::Write> TabWriter<W> {
     /// Set the alignment of text within cells. This will effect future flushes.
     ///
     /// The default alignment is `Alignment::Left`.
-    pub fn alignment(mut self, alignment: Alignment) -> TabWriter<W> {
+    pub const fn alignment(mut self, alignment: Alignment) -> TabWriter<W> {
         self.alignment = alignment;
         self
     }
@@ -217,7 +217,7 @@ impl<W: io::Write> TabWriter<W> {
 }
 
 impl Cell {
-    fn new(start: usize) -> Cell {
+    const fn new(start: usize) -> Cell {
         Cell { start, width: 0, size: 0 }
     }
 
@@ -314,7 +314,7 @@ pub struct IntoInnerError<W>(W, io::Error);
 
 impl<W> IntoInnerError<W> {
     /// Returns the error which caused the `into_error()` call to fail.
-    pub fn error(&self) -> &io::Error {
+    pub const fn error(&self) -> &io::Error {
         &self.1
     }
 
