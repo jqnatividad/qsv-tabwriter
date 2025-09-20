@@ -300,10 +300,10 @@ impl<W: io::Write> io::Write for TabWriter<W> {
 
         let mut first = true;
         for (line, widths) in self.lines.iter().zip(widths.iter()) {
-            if !first {
-                self.w.write_all(b"\n")?;
+            if first {
+                first = false;
             } else {
-                first = false
+                self.w.write_all(b"\n")?;
             }
 
             let mut use_tabs = self.tab_indent;
