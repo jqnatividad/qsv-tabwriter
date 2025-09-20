@@ -399,7 +399,7 @@ fn cell_widths(lines: &[Vec<Cell>], minwidth: usize) -> Vec<Vec<usize>> {
         for col in ws[i].len()..(iline.len() - 1) {
             let mut width = minwidth;
             let mut contig_count = 0;
-            for line in lines[i..].iter() {
+            for line in &lines[i..] {
                 if col + 1 >= line.len() {
                     // ignores last column
                     break;
