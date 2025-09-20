@@ -295,8 +295,7 @@ impl<W: io::Write> io::Write for TabWriter<W> {
             .map(|ws| ws.iter().copied().max().unwrap_or(0))
             .max()
             .unwrap_or(0);
-        let padding: String =
-            std::iter::repeat_n(' ', biggest_width + self.padding).collect();
+        let padding: String = " ".repeat(biggest_width + self.padding);
 
         let mut first = true;
         for (line, widths) in self.lines.iter().zip(widths.iter()) {
