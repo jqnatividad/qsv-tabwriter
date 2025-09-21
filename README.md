@@ -62,7 +62,7 @@ Notice that once a column block is broken, alignment starts over again.
 ### Documentation
 
 The API is fully documented with some examples:
-[http://burntsushi.net/rustdoc/tabwriter/](http://burntsushi.net/rustdoc/tabwriter/).
+[https://docs.rs/tabwriter/latest/tabwriter/](https://docs.rs/tabwriter/latest/tabwriter/).
 
 
 ### Installation
