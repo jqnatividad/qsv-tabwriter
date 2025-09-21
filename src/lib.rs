@@ -103,7 +103,7 @@ pub struct TabWriter<W> {
 }
 
 /// `Alignment` represents how a `TabWriter` should align text within its cell.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Alignment {
     /// Text should be aligned with the left edge of the cell
     Left,
@@ -111,6 +111,9 @@ pub enum Alignment {
     Center,
     /// Text should be aligned with the right edge of the cell
     Right,
+    /// Like Left, but the last whitespace is a tab
+    /// This produces a valid TSV file
+    LeftEndTab,
 }
 
 #[derive(Debug)]
@@ -331,11 +334,29 @@ impl<W: io::Write> io::Write for TabWriter<W> {
                         Alignment::Center => {
                             (extra_space / 2, extra_space - extra_space / 2)
                         }
+                        Alignment::LeftEndTab => (0, extra_space),
                     };
                     right_spaces += self.padding;
+
                     write!(&mut self.w, "{}", &padding[0..left_spaces])?;
                     self.w.write_all(bytes)?;
-                    write!(&mut self.w, "{}", &padding[0..right_spaces])?;
+
+                    // Handle LeftEndTab alignment
+                    if self.alignment == Alignment::LeftEndTab {
+                        // use spaces for padding except the last character is a tab
+                        if right_spaces > 1 {
+                            write!(
+                                &mut self.w,
+                                "{}",
+                                &padding[0..right_spaces - 1]
+                            )?;
+                        }
+                        if right_spaces > 0 {
+                            write!(&mut self.w, "\t")?;
+                        }
+                    } else {
+                        write!(&mut self.w, "{}", &padding[0..right_spaces])?;
+                    }
                 }
             }
         }
