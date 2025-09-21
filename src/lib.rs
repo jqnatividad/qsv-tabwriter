@@ -76,7 +76,6 @@ use std::cmp;
 use std::error;
 use std::fmt;
 use std::io::{self, Write};
-use std::iter;
 use std::mem;
 use std::str;
 
@@ -225,9 +224,9 @@ impl<W: io::Write> TabWriter<W> {
         mem::swap(&mut self.curcell, &mut curcell);
 
         if self.ansi {
-            curcell.update_width(&self.buf.get_ref(), count_columns_ansi);
+            curcell.update_width(self.buf.get_ref(), count_columns_ansi);
         } else {
-            curcell.update_width(&self.buf.get_ref(), count_columns_noansi);
+            curcell.update_width(self.buf.get_ref(), count_columns_noansi);
         }
         self.curline_mut().push(curcell);
     }
@@ -235,7 +234,7 @@ impl<W: io::Write> TabWriter<W> {
     /// Return a view of the current line of cells.
     fn curline(&mut self) -> &[Cell] {
         let i = self.lines.len() - 1;
-        &*self.lines[i]
+        &self.lines[i]
     }
 
     /// Return a mutable view of the current line of cells.
@@ -296,18 +295,18 @@ impl<W: io::Write> io::Write for TabWriter<W> {
         // Just allocate the most we'll ever need and borrow from it.
         let biggest_width = widths
             .iter()
-            .map(|ws| ws.iter().map(|&w| w).max().unwrap_or(0))
+            .map(|ws| ws.iter().copied().max().unwrap_or(0))
             .max()
             .unwrap_or(0);
         let padding: String =
-            iter::repeat(' ').take(biggest_width + self.padding).collect();
+            std::iter::repeat_n(' ', biggest_width + self.padding).collect();
 
         let mut first = true;
         for (line, widths) in self.lines.iter().zip(widths.iter()) {
-            if !first {
-                self.w.write_all(b"\n")?;
+            if first {
+                first = false;
             } else {
-                first = false
+                self.w.write_all(b"\n")?;
             }
 
             let mut use_tabs = self.tab_indent;
@@ -407,7 +406,7 @@ impl<W: ::std::any::Any> error::Error for IntoInnerError<W> {
     }
 }
 
-fn cell_widths(lines: &Vec<Vec<Cell>>, minwidth: usize) -> Vec<Vec<usize>> {
+fn cell_widths(lines: &[Vec<Cell>], minwidth: usize) -> Vec<Vec<usize>> {
     // Naively, this algorithm looks like it could be O(n^2m) where `n` is
     // the number of lines and `m` is the number of contiguous columns.
     //
@@ -448,7 +447,7 @@ fn count_columns_noansi(bytes: &[u8]) -> usize {
         Ok(s) => s
             .chars()
             .map(|c| UnicodeWidthChar::width(c).unwrap_or(0))
-            .fold(0, |sum, width| sum + width),
+            .sum::<usize>(),
     }
 }
 
@@ -462,7 +461,7 @@ fn count_columns_ansi(bytes: &[u8]) -> usize {
         Ok(s) => strip_formatting(s)
             .chars()
             .map(|c| UnicodeWidthChar::width(c).unwrap_or(0))
-            .fold(0, |sum, width| sum + width),
+            .sum::<usize>(),
     }
 }
 
