@@ -75,7 +75,7 @@
 use std::cmp;
 use std::error;
 use std::fmt;
-use std::io::{self, Write};
+use std::io::{self, BufWriter, Write};
 use std::mem;
 use std::str;
 
@@ -89,8 +89,8 @@ mod test;
 /// blocks, all buffered output will be flushed to the underlying writer.
 /// Otherwise, output will stay buffered until `flush` is explicitly called.
 #[derive(Debug)]
-pub struct TabWriter<W> {
-    w: W,
+pub struct TabWriter<W: io::Write> {
+    w: BufWriter<W>,
     buf: io::Cursor<Vec<u8>>,
     lines: Vec<Vec<Cell>>,
     curcell: Cell,
@@ -132,7 +132,7 @@ impl<W: io::Write> TabWriter<W> {
     /// write to the given writer.
     pub fn new(w: W) -> TabWriter<W> {
         TabWriter {
-            w,
+            w: BufWriter::with_capacity(65536, w),
             buf: io::Cursor::new(Vec::with_capacity(1024)),
             lines: vec![vec![]],
             curcell: Cell::new(0),
@@ -195,10 +195,22 @@ impl<W: io::Write> TabWriter<W> {
     ///
     /// This internal buffer is flushed before returning the writer. If the
     /// flush fails, then an error is returned.
-    pub fn into_inner(mut self) -> Result<W, IntoInnerError<TabWriter<W>>> {
-        match self.flush() {
-            Ok(()) => Ok(self.w),
-            Err(err) => Err(IntoInnerError(self, err)),
+    pub fn into_inner(mut self) -> Result<W, IntoInnerError<W>> {
+        // First flush our internal buffer
+        if let Err(err) = self.flush() {
+            return Err(IntoInnerError(self, err));
+        }
+
+        // Now extract the BufWriter and try to get the inner writer
+        // BufWriter::into_inner() can only fail if there was a previous write error,
+        // which would have been caught by our flush() call above.
+        match self.w.into_inner() {
+            Ok(inner_w) => Ok(inner_w),
+            Err(_buf_err) => {
+                // This should never happen since we flushed above, but if it does,
+                // we'll panic as it indicates a serious system-level problem.
+                panic!("BufWriter::into_inner() failed unexpectedly after successful flush")
+            }
         }
     }
 
@@ -369,33 +381,33 @@ impl<W: io::Write> io::Write for TabWriter<W> {
 ///
 /// This combines the error that happened while flushing the buffer with the
 /// `TabWriter` itself.
-pub struct IntoInnerError<W>(W, io::Error);
+pub struct IntoInnerError<W: io::Write>(TabWriter<W>, io::Error);
 
-impl<W> IntoInnerError<W> {
+impl<W: io::Write> IntoInnerError<W> {
     /// Returns the error which caused the `into_error()` call to fail.
     pub fn error(&self) -> &io::Error {
         &self.1
     }
 
     /// Returns the `TabWriter` instance which generated the error.
-    pub fn into_inner(self) -> W {
+    pub fn into_inner(self) -> TabWriter<W> {
         self.0
     }
 }
 
-impl<W> fmt::Debug for IntoInnerError<W> {
+impl<W: io::Write> fmt::Debug for IntoInnerError<W> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.error().fmt(f)
     }
 }
 
-impl<W> fmt::Display for IntoInnerError<W> {
+impl<W: io::Write> fmt::Display for IntoInnerError<W> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.error().fmt(f)
     }
 }
 
-impl<W: ::std::any::Any> error::Error for IntoInnerError<W> {
+impl<W: io::Write + ::std::any::Any> error::Error for IntoInnerError<W> {
     #[allow(deprecated)]
     fn description(&self) -> &str {
         self.error().description()
