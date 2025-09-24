@@ -119,6 +119,12 @@ pub enum Alignment {
     LeftFwf,
 }
 
+enum MainAlignment {
+    Left,
+    Right,
+    Center,
+}
+
 #[derive(Debug)]
 struct Cell {
     start: usize, // offset into TabWriter.buf
@@ -153,6 +159,7 @@ impl<W: io::Write> TabWriter<W> {
     /// then it is padded with spaces.
     ///
     /// The default minimum width is `2`.
+    #[must_use]
     pub fn minwidth(mut self, minwidth: usize) -> TabWriter<W> {
         self.minwidth = minwidth;
         self
@@ -164,6 +171,7 @@ impl<W: io::Write> TabWriter<W> {
     /// separation.
     ///
     /// The default padding is `2`.
+    #[must_use]
     pub fn padding(mut self, padding: usize) -> TabWriter<W> {
         self.padding = padding;
         self
@@ -172,6 +180,7 @@ impl<W: io::Write> TabWriter<W> {
     /// Set the alignment of text within cells. This will effect future flushes.
     ///
     /// The default alignment is `Alignment::Left`.
+    #[must_use]
     pub fn alignment(mut self, alignment: Alignment) -> TabWriter<W> {
         self.alignment = alignment;
         self
@@ -181,6 +190,7 @@ impl<W: io::Write> TabWriter<W> {
     ///
     /// This is disabled by default. (But is enabled by default when the
     /// deprecated `ansi_formatting` crate feature is enabled.)
+    #[must_use]
     pub fn ansi(mut self, yes: bool) -> TabWriter<W> {
         self.ansi = yes;
         self
@@ -190,6 +200,7 @@ impl<W: io::Write> TabWriter<W> {
     /// leading empty cells on the left).
     ///
     /// This is disabled by default.
+    #[must_use]
     pub fn tab_indent(mut self, yes: bool) -> TabWriter<W> {
         self.tab_indent = yes;
         self
@@ -330,6 +341,17 @@ impl<W: io::Write> io::Write for TabWriter<W> {
         }
 
         let mut first = true;
+
+        // we do this so that we have a more efficient match pattern
+        // in the hot loop below
+        let main_alignment = match self.alignment {
+            Alignment::Left | Alignment::LeftEndTab | Alignment::LeftFwf => {
+                MainAlignment::Left
+            }
+            Alignment::Right => MainAlignment::Right,
+            Alignment::Center => MainAlignment::Center,
+        };
+
         for (line, widths) in self.lines.iter().zip(widths.iter()) {
             if first {
                 first = false;
@@ -354,13 +376,11 @@ impl<W: io::Write> io::Write for TabWriter<W> {
 
                     assert!(widths[i] >= cell.width);
                     let extra_space = widths[i] - cell.width;
-                    let (left_spaces, mut right_spaces) = match self.alignment
+                    let (left_spaces, mut right_spaces) = match main_alignment
                     {
-                        Alignment::Left
-                        | Alignment::LeftEndTab
-                        | Alignment::LeftFwf => (0, extra_space),
-                        Alignment::Right => (extra_space, 0),
-                        Alignment::Center => {
+                        MainAlignment::Left => (0, extra_space),
+                        MainAlignment::Right => (extra_space, 0),
+                        MainAlignment::Center => {
                             (extra_space / 2, extra_space - extra_space / 2)
                         }
                     };
