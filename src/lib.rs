@@ -82,7 +82,7 @@ use std::str;
 #[cfg(test)]
 mod test;
 
-/// TabWriter wraps an arbitrary writer and aligns tabbed output.
+/// `TabWriter` wraps an arbitrary writer and aligns tabbed output.
 ///
 /// Elastic tabstops work by aligning *contiguous* tabbed delimited fields
 /// known as *column blocks*. When a line appears that breaks all contiguous
@@ -208,13 +208,12 @@ impl<W: io::Write> TabWriter<W> {
         // Now extract the BufWriter and try to get the inner writer
         // BufWriter::into_inner() can only fail if there was a previous write error,
         // which would have been caught by our flush() call above.
-        match self.w.into_inner() {
-            Ok(inner_w) => Ok(inner_w),
-            Err(_buf_err) => {
-                // This should never happen since we flushed above, but if it does,
-                // we'll panic as it indicates a serious system-level problem.
-                panic!("BufWriter::into_inner() failed unexpectedly after successful flush")
-            }
+        if let Ok(inner_w) = self.w.into_inner() {
+            Ok(inner_w)
+        } else {
+            // This should never happen since we flushed above, but if it does,
+            // we'll panic as it indicates a serious system-level problem.
+            panic!("BufWriter::into_inner() failed unexpectedly after successful flush")
         }
     }
 
@@ -357,13 +356,13 @@ impl<W: io::Write> io::Write for TabWriter<W> {
                     let extra_space = widths[i] - cell.width;
                     let (left_spaces, mut right_spaces) = match self.alignment
                     {
-                        Alignment::Left => (0, extra_space),
+                        Alignment::Left
+                        | Alignment::LeftEndTab
+                        | Alignment::Leftfwf => (0, extra_space),
                         Alignment::Right => (extra_space, 0),
                         Alignment::Center => {
                             (extra_space / 2, extra_space - extra_space / 2)
                         }
-                        Alignment::LeftEndTab => (0, extra_space),
-                        Alignment::Leftfwf => (0, extra_space),
                     };
                     right_spaces += self.padding;
 
