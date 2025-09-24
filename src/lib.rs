@@ -113,6 +113,10 @@ pub enum Alignment {
     /// Like Left, but the last whitespace is a tab
     /// This produces a valid TSV file
     LeftEndTab,
+    /// Like Left, but adds a comment line at the top that comma-delimited
+    /// enumerates the starting position of each column (Fixed Width Format).
+    /// Positions are 1-indexed.
+    Leftfwf,
 }
 
 #[derive(Debug)]
@@ -313,6 +317,19 @@ impl<W: io::Write> io::Write for TabWriter<W> {
         let padding: String =
             std::iter::repeat_n(' ', biggest_width + self.padding).collect();
 
+        // Generate comment line for Leftfwf alignment
+        if self.alignment == Alignment::Leftfwf
+            && !self.lines.is_empty()
+            && !self.lines[0].is_empty()
+        {
+            let comment_line = generate_fwf_comment_line(
+                &self.lines[0],
+                &widths[0],
+                self.padding,
+            );
+            self.w.write_all(comment_line.as_bytes())?;
+        }
+
         let mut first = true;
         for (line, widths) in self.lines.iter().zip(widths.iter()) {
             if first {
@@ -346,6 +363,7 @@ impl<W: io::Write> io::Write for TabWriter<W> {
                             (extra_space / 2, extra_space - extra_space / 2)
                         }
                         Alignment::LeftEndTab => (0, extra_space),
+                        Alignment::Leftfwf => (0, extra_space),
                     };
                     right_spaces += self.padding;
 
@@ -416,6 +434,40 @@ impl<W: io::Write + ::std::any::Any> error::Error for IntoInnerError<W> {
     fn cause(&self) -> Option<&dyn error::Error> {
         Some(self.error())
     }
+}
+
+/// Generate a comment line for the Fixed Width Format alignment.
+///
+/// The comment line is a comma-delimited list of the starting position of each
+/// column. Positions are 1-indexed.
+///
+/// # Arguments
+/// * `cells` - The cells on the first line of the table.
+/// * `widths` - The widths of the columns.
+/// * `padding` - The padding between columns.
+///
+/// # Returns
+/// A string containing the comment line.
+fn generate_fwf_comment_line(
+    cells: &[Cell],
+    widths: &[usize],
+    padding: usize,
+) -> String {
+    let mut positions = Vec::new();
+    let mut current_pos = 1; // Start with 1-indexed positions
+
+    // Calculate positions for all columns
+    for &width in widths.iter() {
+        positions.push(current_pos.to_string());
+        current_pos += width + padding;
+    }
+
+    // Add position for the last column if it exists
+    if cells.len() > widths.len() {
+        positions.push(current_pos.to_string());
+    }
+
+    format!("#{}\n", positions.join(","))
 }
 
 fn cell_widths(lines: &[Vec<Cell>], minwidth: usize) -> Vec<Vec<usize>> {
