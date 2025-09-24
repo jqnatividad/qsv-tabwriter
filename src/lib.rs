@@ -102,7 +102,7 @@ pub struct TabWriter<W: io::Write> {
 }
 
 /// `Alignment` represents how a `TabWriter` should align text within its cell.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Alignment {
     /// Text should be aligned with the left edge of the cell
     Left,
@@ -140,8 +140,8 @@ impl<W: io::Write> TabWriter<W> {
     ///
     /// Note that `flush` must be called to guarantee that `TabWriter` will
     /// write to the given writer.
-    pub fn new(w: W) -> TabWriter<W> {
-        TabWriter {
+    pub fn new(w: W) -> Self {
+        Self {
             w: BufWriter::with_capacity(65536, w),
             buf: io::Cursor::new(Vec::with_capacity(1024)),
             lines: vec![vec![]],
@@ -160,7 +160,7 @@ impl<W: io::Write> TabWriter<W> {
     ///
     /// The default minimum width is `2`.
     #[must_use]
-    pub fn minwidth(mut self, minwidth: usize) -> TabWriter<W> {
+    pub const fn minwidth(mut self, minwidth: usize) -> Self {
         self.minwidth = minwidth;
         self
     }
@@ -172,7 +172,7 @@ impl<W: io::Write> TabWriter<W> {
     ///
     /// The default padding is `2`.
     #[must_use]
-    pub fn padding(mut self, padding: usize) -> TabWriter<W> {
+    pub const fn padding(mut self, padding: usize) -> Self {
         self.padding = padding;
         self
     }
@@ -181,7 +181,7 @@ impl<W: io::Write> TabWriter<W> {
     ///
     /// The default alignment is `Alignment::Left`.
     #[must_use]
-    pub fn alignment(mut self, alignment: Alignment) -> TabWriter<W> {
+    pub const fn alignment(mut self, alignment: Alignment) -> Self {
         self.alignment = alignment;
         self
     }
@@ -191,7 +191,7 @@ impl<W: io::Write> TabWriter<W> {
     /// This is disabled by default. (But is enabled by default when the
     /// deprecated `ansi_formatting` crate feature is enabled.)
     #[must_use]
-    pub fn ansi(mut self, yes: bool) -> TabWriter<W> {
+    pub const fn ansi(mut self, yes: bool) -> Self {
         self.ansi = yes;
         self
     }
@@ -201,7 +201,7 @@ impl<W: io::Write> TabWriter<W> {
     ///
     /// This is disabled by default.
     #[must_use]
-    pub fn tab_indent(mut self, yes: bool) -> TabWriter<W> {
+    pub const fn tab_indent(mut self, yes: bool) -> Self {
         self.tab_indent = yes;
         self
     }
@@ -210,6 +210,17 @@ impl<W: io::Write> TabWriter<W> {
     ///
     /// This internal buffer is flushed before returning the writer. If the
     /// flush fails, then an error is returned.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if flushing the internal buffer fails.
+    /// The error is wrapped in an `IntoInnerError` along with the original `TabWriter`.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if `BufWriter::into_inner()` fails after a successful
+    /// flush, which would indicate a serious system-level problem.
+    #[allow(clippy::result_large_err)]
     pub fn into_inner(mut self) -> Result<W, IntoInnerError<W>> {
         // First flush our internal buffer
         if let Err(err) = self.flush() {
@@ -219,13 +230,11 @@ impl<W: io::Write> TabWriter<W> {
         // Now extract the BufWriter and try to get the inner writer
         // BufWriter::into_inner() can only fail if there was a previous write error,
         // which would have been caught by our flush() call above.
-        if let Ok(inner_w) = self.w.into_inner() {
-            Ok(inner_w)
-        } else {
-            // This should never happen since we flushed above, but if it does,
-            // we'll panic as it indicates a serious system-level problem.
-            panic!("BufWriter::into_inner() failed unexpectedly after successful flush")
-        }
+        self.w.into_inner().map_or_else(|_|
+            // This panic should never happen since we flushed above, but if it does,
+            // panic as it indicates a serious system-level problem.
+            panic!("BufWriter::into_inner() failed unexpectedly after successful flush"),
+            |inner_w| Ok(inner_w))
     }
 
     /// Resets the state of the aligner. Once the aligner is reset, all future
@@ -246,6 +255,7 @@ impl<W: io::Write> TabWriter<W> {
     /// Ends the current cell, updates the UTF8 width of the cell and starts
     /// a fresh cell.
     fn term_curcell(&mut self) {
+        #[allow(clippy::cast_possible_truncation)]
         let mut curcell = Cell::new(self.buf.position() as usize);
         mem::swap(&mut self.curcell, &mut curcell);
 
@@ -258,7 +268,7 @@ impl<W: io::Write> TabWriter<W> {
     }
 
     /// Return a view of the current line of cells.
-    fn curline(&mut self) -> &[Cell] {
+    fn curline(&self) -> &[Cell] {
         let i = self.lines.len() - 1;
         &self.lines[i]
     }
@@ -271,8 +281,8 @@ impl<W: io::Write> TabWriter<W> {
 }
 
 impl Cell {
-    fn new(start: usize) -> Cell {
-        Cell { start, width: 0, size: 0 }
+    const fn new(start: usize) -> Self {
+        Self { start, width: 0, size: 0 }
     }
 
     fn update_width(
@@ -422,7 +432,7 @@ pub struct IntoInnerError<W: io::Write>(TabWriter<W>, io::Error);
 
 impl<W: io::Write> IntoInnerError<W> {
     /// Returns the error which caused the `into_error()` call to fail.
-    pub fn error(&self) -> &io::Error {
+    pub const fn error(&self) -> &io::Error {
         &self.1
     }
 
@@ -524,13 +534,12 @@ fn count_columns_noansi(bytes: &[u8]) -> usize {
 
     // If we have a Unicode string, then attempt to guess the number of
     // *display* columns used.
-    match str::from_utf8(bytes) {
-        Err(_) => bytes.len(),
-        Ok(s) => s
-            .chars()
+    //
+    str::from_utf8(bytes).map_or(bytes.len(), |s| {
+        s.chars()
             .map(|c| UnicodeWidthChar::width(c).unwrap_or(0))
-            .sum::<usize>(),
-    }
+            .sum::<usize>()
+    })
 }
 
 fn count_columns_ansi(bytes: &[u8]) -> usize {
@@ -538,13 +547,12 @@ fn count_columns_ansi(bytes: &[u8]) -> usize {
 
     // If we have a Unicode string, then attempt to guess the number of
     // *display* columns used.
-    match str::from_utf8(bytes) {
-        Err(_) => bytes.len(),
-        Ok(s) => strip_formatting(s)
+    str::from_utf8(bytes).map_or(bytes.len(), |s| {
+        strip_formatting(s)
             .chars()
             .map(|c| UnicodeWidthChar::width(c).unwrap_or(0))
-            .sum::<usize>(),
-    }
+            .sum::<usize>()
+    })
 }
 
 fn strip_formatting(input: &str) -> std::borrow::Cow<'_, str> {
