@@ -318,3 +318,33 @@ fn test_left_end_tab_complex() {
         "name \tage\tcity\nJohn \t25 \tNew York\nAlice\t30 \tLos Angeles",
     );
 }
+
+#[test]
+fn test_leftfwf_basic() {
+    // Leftfwf should add a comment line with column positions
+    iseq(
+        tabw().padding(2).minwidth(2).alignment(Alignment::Leftfwf),
+        "a\tb\nxx\tyy",
+        "#1,5\na   b\nxx  yy",
+    );
+}
+
+#[test]
+fn test_leftfwf_varying_widths() {
+    // Leftfwf should add a comment line with column positions for varying widths
+    iseq(
+        tabw().padding(1).minwidth(0).alignment(Alignment::Leftfwf),
+        "name\tage\tcity\nJohn\t25\tNew York\nAlice\t30\tLos Angeles",
+        "#1,7,11\nname  age city\nJohn  25  New York\nAlice 30  Los Angeles",
+    );
+}
+
+#[test]
+fn test_leftfwf_no_padding() {
+    // Leftfwf should work with no padding
+    iseq(
+        tabw().padding(0).minwidth(2).alignment(Alignment::Leftfwf),
+        "a\tb\nxx\tyy",
+        "#1,3\na b\nxxyy",
+    );
+}
