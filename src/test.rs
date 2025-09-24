@@ -263,3 +263,88 @@ type cell struct {
 ",
     )
 }
+
+#[test]
+fn test_left_end_tab_basic() {
+    // Normal Left alignment produces "a   b\nxx  yy"
+    // LeftEndTab should produce "a  \tb\nxx \tyy" (replace last space with tab)
+    iseq(
+        tabw().padding(2).minwidth(2).alignment(Alignment::LeftEndTab),
+        "a\tb\nxx\tyy",
+        "a  \tb\nxx \tyy",
+    );
+}
+
+#[test]
+fn test_left_end_tab_varying_widths() {
+    // Left aligned output is "a     foo  x\naaaa  b    xxxx"
+    // LeftEndTab should be "a    \tfoo \tx\naaaa \tb   \txxxx"
+    iseq(
+        tabw().padding(2).minwidth(2).alignment(Alignment::LeftEndTab),
+        "a\tfoo\tx\naaaa\tb\txxxx",
+        "a    \tfoo \tx\naaaa \tb   \txxxx",
+    );
+}
+
+#[test]
+fn test_left_end_tab_no_padding() {
+    // Left aligned output is "a b\nxxyy"
+    // LeftEndTab should be "a\tb\nxxyy" (replace single space with tab)
+    iseq(
+        tabw().padding(0).minwidth(2).alignment(Alignment::LeftEndTab),
+        "a\tb\nxx\tyy",
+        "a\tb\nxxyy",
+    );
+}
+
+#[test]
+fn test_left_end_tab_with_minwidth() {
+    // Left aligned output is "a    b\nxx   yy"
+    // LeftEndTab should be "a   \tb\nxx  \tyy" (last column gets no tab)
+    iseq(
+        tabw().minwidth(5).padding(0).alignment(Alignment::LeftEndTab),
+        "a\tb\nxx\tyy",
+        "a   \tb\nxx  \tyy",
+    );
+}
+
+#[test]
+fn test_left_end_tab_complex() {
+    // Left aligned output is "name  age city\nJohn  25  New York\nAlice 30  Los Angeles"
+    // LeftEndTab should be "name \tage\tcity\nJohn \t25 \tNew York\nAlice\t30 \tLos Angeles"
+    iseq(
+        tabw().padding(1).minwidth(0).alignment(Alignment::LeftEndTab),
+        "name\tage\tcity\nJohn\t25\tNew York\nAlice\t30\tLos Angeles",
+        "name \tage\tcity\nJohn \t25 \tNew York\nAlice\t30 \tLos Angeles",
+    );
+}
+
+#[test]
+fn test_leftfwf_basic() {
+    // Leftfwf should add a comment line with column positions
+    iseq(
+        tabw().padding(2).minwidth(2).alignment(Alignment::LeftFwf),
+        "a\tb\nxx\tyy",
+        "#1,5\na   b\nxx  yy",
+    );
+}
+
+#[test]
+fn test_leftfwf_varying_widths() {
+    // Leftfwf should add a comment line with column positions for varying widths
+    iseq(
+        tabw().padding(1).minwidth(0).alignment(Alignment::LeftFwf),
+        "name\tage\tcity\nJohn\t25\tNew York\nAlice\t30\tLos Angeles",
+        "#1,7,11\nname  age city\nJohn  25  New York\nAlice 30  Los Angeles",
+    );
+}
+
+#[test]
+fn test_leftfwf_no_padding() {
+    // Leftfwf should work with no padding
+    iseq(
+        tabw().padding(0).minwidth(2).alignment(Alignment::LeftFwf),
+        "a\tb\nxx\tyy",
+        "#1,3\na b\nxxyy",
+    );
+}

@@ -75,23 +75,22 @@
 use std::cmp;
 use std::error;
 use std::fmt;
-use std::io::{self, Write};
-use std::iter;
+use std::io::{self, BufWriter, Write};
 use std::mem;
 use std::str;
 
 #[cfg(test)]
 mod test;
 
-/// TabWriter wraps an arbitrary writer and aligns tabbed output.
+/// `TabWriter` wraps an arbitrary writer and aligns tabbed output.
 ///
 /// Elastic tabstops work by aligning *contiguous* tabbed delimited fields
 /// known as *column blocks*. When a line appears that breaks all contiguous
 /// blocks, all buffered output will be flushed to the underlying writer.
 /// Otherwise, output will stay buffered until `flush` is explicitly called.
 #[derive(Debug)]
-pub struct TabWriter<W> {
-    w: W,
+pub struct TabWriter<W: io::Write> {
+    w: BufWriter<W>,
     buf: io::Cursor<Vec<u8>>,
     lines: Vec<Vec<Cell>>,
     curcell: Cell,
@@ -103,7 +102,7 @@ pub struct TabWriter<W> {
 }
 
 /// `Alignment` represents how a `TabWriter` should align text within its cell.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Alignment {
     /// Text should be aligned with the left edge of the cell
     Left,
@@ -111,6 +110,13 @@ pub enum Alignment {
     Center,
     /// Text should be aligned with the right edge of the cell
     Right,
+    /// Like Left, but the last whitespace is a tab
+    /// This produces a valid TSV file
+    LeftEndTab,
+    /// Like Left, but adds a comment line at the top that comma-delimited
+    /// enumerates the starting position of each column (Fixed Width Format).
+    /// Positions are 1-indexed.
+    LeftFwf,
 }
 
 #[derive(Debug)]
@@ -130,7 +136,7 @@ impl<W: io::Write> TabWriter<W> {
     /// write to the given writer.
     pub fn new(w: W) -> TabWriter<W> {
         TabWriter {
-            w,
+            w: BufWriter::with_capacity(65536, w),
             buf: io::Cursor::new(Vec::with_capacity(1024)),
             lines: vec![vec![]],
             curcell: Cell::new(0),
@@ -193,10 +199,21 @@ impl<W: io::Write> TabWriter<W> {
     ///
     /// This internal buffer is flushed before returning the writer. If the
     /// flush fails, then an error is returned.
-    pub fn into_inner(mut self) -> Result<W, IntoInnerError<TabWriter<W>>> {
-        match self.flush() {
-            Ok(()) => Ok(self.w),
-            Err(err) => Err(IntoInnerError(self, err)),
+    pub fn into_inner(mut self) -> Result<W, IntoInnerError<W>> {
+        // First flush our internal buffer
+        if let Err(err) = self.flush() {
+            return Err(IntoInnerError(self, err));
+        }
+
+        // Now extract the BufWriter and try to get the inner writer
+        // BufWriter::into_inner() can only fail if there was a previous write error,
+        // which would have been caught by our flush() call above.
+        if let Ok(inner_w) = self.w.into_inner() {
+            Ok(inner_w)
+        } else {
+            // This should never happen since we flushed above, but if it does,
+            // we'll panic as it indicates a serious system-level problem.
+            panic!("BufWriter::into_inner() failed unexpectedly after successful flush")
         }
     }
 
@@ -222,9 +239,9 @@ impl<W: io::Write> TabWriter<W> {
         mem::swap(&mut self.curcell, &mut curcell);
 
         if self.ansi {
-            curcell.update_width(&self.buf.get_ref(), count_columns_ansi);
+            curcell.update_width(self.buf.get_ref(), count_columns_ansi);
         } else {
-            curcell.update_width(&self.buf.get_ref(), count_columns_noansi);
+            curcell.update_width(self.buf.get_ref(), count_columns_noansi);
         }
         self.curline_mut().push(curcell);
     }
@@ -232,7 +249,7 @@ impl<W: io::Write> TabWriter<W> {
     /// Return a view of the current line of cells.
     fn curline(&mut self) -> &[Cell] {
         let i = self.lines.len() - 1;
-        &*self.lines[i]
+        &self.lines[i]
     }
 
     /// Return a mutable view of the current line of cells.
@@ -293,18 +310,31 @@ impl<W: io::Write> io::Write for TabWriter<W> {
         // Just allocate the most we'll ever need and borrow from it.
         let biggest_width = widths
             .iter()
-            .map(|ws| ws.iter().map(|&w| w).max().unwrap_or(0))
+            .map(|ws| ws.iter().copied().max().unwrap_or(0))
             .max()
             .unwrap_or(0);
         let padding: String =
-            iter::repeat(' ').take(biggest_width + self.padding).collect();
+            std::iter::repeat_n(' ', biggest_width + self.padding).collect();
+
+        // Generate comment line for Leftfwf alignment
+        if self.alignment == Alignment::LeftFwf
+            && !self.lines.is_empty()
+            && !self.lines[0].is_empty()
+        {
+            let comment_line = generate_fwf_comment_line(
+                &self.lines[0],
+                &widths[0],
+                self.padding,
+            );
+            self.w.write_all(comment_line.as_bytes())?;
+        }
 
         let mut first = true;
         for (line, widths) in self.lines.iter().zip(widths.iter()) {
-            if !first {
-                self.w.write_all(b"\n")?;
+            if first {
+                first = false;
             } else {
-                first = false
+                self.w.write_all(b"\n")?;
             }
 
             let mut use_tabs = self.tab_indent;
@@ -326,16 +356,35 @@ impl<W: io::Write> io::Write for TabWriter<W> {
                     let extra_space = widths[i] - cell.width;
                     let (left_spaces, mut right_spaces) = match self.alignment
                     {
-                        Alignment::Left => (0, extra_space),
+                        Alignment::Left
+                        | Alignment::LeftEndTab
+                        | Alignment::LeftFwf => (0, extra_space),
                         Alignment::Right => (extra_space, 0),
                         Alignment::Center => {
                             (extra_space / 2, extra_space - extra_space / 2)
                         }
                     };
                     right_spaces += self.padding;
+
                     write!(&mut self.w, "{}", &padding[0..left_spaces])?;
                     self.w.write_all(bytes)?;
-                    write!(&mut self.w, "{}", &padding[0..right_spaces])?;
+
+                    // Handle LeftEndTab alignment
+                    if self.alignment == Alignment::LeftEndTab {
+                        // use spaces for padding except the last character is a tab
+                        if right_spaces > 1 {
+                            write!(
+                                &mut self.w,
+                                "{}",
+                                &padding[0..right_spaces - 1]
+                            )?;
+                        }
+                        if right_spaces > 0 {
+                            write!(&mut self.w, "\t")?;
+                        }
+                    } else {
+                        write!(&mut self.w, "{}", &padding[0..right_spaces])?;
+                    }
                 }
             }
         }
@@ -349,33 +398,33 @@ impl<W: io::Write> io::Write for TabWriter<W> {
 ///
 /// This combines the error that happened while flushing the buffer with the
 /// `TabWriter` itself.
-pub struct IntoInnerError<W>(W, io::Error);
+pub struct IntoInnerError<W: io::Write>(TabWriter<W>, io::Error);
 
-impl<W> IntoInnerError<W> {
+impl<W: io::Write> IntoInnerError<W> {
     /// Returns the error which caused the `into_error()` call to fail.
     pub fn error(&self) -> &io::Error {
         &self.1
     }
 
     /// Returns the `TabWriter` instance which generated the error.
-    pub fn into_inner(self) -> W {
+    pub fn into_inner(self) -> TabWriter<W> {
         self.0
     }
 }
 
-impl<W> fmt::Debug for IntoInnerError<W> {
+impl<W: io::Write> fmt::Debug for IntoInnerError<W> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.error().fmt(f)
     }
 }
 
-impl<W> fmt::Display for IntoInnerError<W> {
+impl<W: io::Write> fmt::Display for IntoInnerError<W> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.error().fmt(f)
     }
 }
 
-impl<W: ::std::any::Any> error::Error for IntoInnerError<W> {
+impl<W: io::Write + ::std::any::Any> error::Error for IntoInnerError<W> {
     #[allow(deprecated)]
     fn description(&self) -> &str {
         self.error().description()
@@ -386,7 +435,41 @@ impl<W: ::std::any::Any> error::Error for IntoInnerError<W> {
     }
 }
 
-fn cell_widths(lines: &Vec<Vec<Cell>>, minwidth: usize) -> Vec<Vec<usize>> {
+/// Generate a comment line for the Fixed Width Format alignment.
+///
+/// The comment line is a comma-delimited list of the starting position of each
+/// column. Positions are 1-indexed.
+///
+/// # Arguments
+/// * `cells` - The cells on the first line of the table.
+/// * `widths` - The widths of the columns.
+/// * `padding` - The padding between columns.
+///
+/// # Returns
+/// A string containing the comment line.
+fn generate_fwf_comment_line(
+    cells: &[Cell],
+    widths: &[usize],
+    padding: usize,
+) -> String {
+    let mut positions = Vec::new();
+    let mut current_pos = 1; // Start with 1-indexed positions
+
+    // Calculate positions for all columns
+    for &width in widths {
+        positions.push(current_pos.to_string());
+        current_pos += width + padding;
+    }
+
+    // Add position for the last column if it exists
+    if cells.len() > widths.len() {
+        positions.push(current_pos.to_string());
+    }
+
+    format!("#{}\n", positions.join(","))
+}
+
+fn cell_widths(lines: &[Vec<Cell>], minwidth: usize) -> Vec<Vec<usize>> {
     // Naively, this algorithm looks like it could be O(n^2m) where `n` is
     // the number of lines and `m` is the number of contiguous columns.
     //
@@ -400,7 +483,7 @@ fn cell_widths(lines: &Vec<Vec<Cell>>, minwidth: usize) -> Vec<Vec<usize>> {
         for col in ws[i].len()..(iline.len() - 1) {
             let mut width = minwidth;
             let mut contig_count = 0;
-            for line in lines[i..].iter() {
+            for line in &lines[i..] {
                 if col + 1 >= line.len() {
                     // ignores last column
                     break;
@@ -408,9 +491,8 @@ fn cell_widths(lines: &Vec<Vec<Cell>>, minwidth: usize) -> Vec<Vec<usize>> {
                 contig_count += 1;
                 width = cmp::max(width, line[col].width);
             }
-            assert!(contig_count >= 1);
-            for j in i..(i + contig_count) {
-                ws[j].push(width);
+            for line_widths in ws.iter_mut().skip(i).take(contig_count) {
+                line_widths.push(width);
             }
         }
     }
@@ -427,7 +509,7 @@ fn count_columns_noansi(bytes: &[u8]) -> usize {
         Ok(s) => s
             .chars()
             .map(|c| UnicodeWidthChar::width(c).unwrap_or(0))
-            .fold(0, |sum, width| sum + width),
+            .sum::<usize>(),
     }
 }
 
@@ -441,11 +523,11 @@ fn count_columns_ansi(bytes: &[u8]) -> usize {
         Ok(s) => strip_formatting(s)
             .chars()
             .map(|c| UnicodeWidthChar::width(c).unwrap_or(0))
-            .fold(0, |sum, width| sum + width),
+            .sum::<usize>(),
     }
 }
 
-fn strip_formatting<'t>(input: &'t str) -> std::borrow::Cow<'t, str> {
+fn strip_formatting(input: &str) -> std::borrow::Cow<'_, str> {
     let mut escapes = find_ansi_escapes(input).peekable();
     if escapes.peek().is_none() {
         return std::borrow::Cow::Borrowed(input);
@@ -460,9 +542,9 @@ fn strip_formatting<'t>(input: &'t str) -> std::borrow::Cow<'t, str> {
     std::borrow::Cow::Owned(without_escapes)
 }
 
-fn find_ansi_escapes<'t>(
-    input: &'t str,
-) -> impl Iterator<Item = std::ops::Range<usize>> + 't {
+fn find_ansi_escapes(
+    input: &str,
+) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
     const ESCAPE_PREFIX: &str = "\x1B[";
     let mut last_end = 0;
     std::iter::from_fn(move || {
