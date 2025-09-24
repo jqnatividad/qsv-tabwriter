@@ -529,7 +529,7 @@ fn count_columns_ansi(bytes: &[u8]) -> usize {
     }
 }
 
-fn strip_formatting<'t>(input: &'t str) -> std::borrow::Cow<'t, str> {
+fn strip_formatting(input: &str) -> std::borrow::Cow<'_, str> {
     let mut escapes = find_ansi_escapes(input).peekable();
     if escapes.peek().is_none() {
         return std::borrow::Cow::Borrowed(input);
@@ -544,9 +544,9 @@ fn strip_formatting<'t>(input: &'t str) -> std::borrow::Cow<'t, str> {
     std::borrow::Cow::Owned(without_escapes)
 }
 
-fn find_ansi_escapes<'t>(
-    input: &'t str,
-) -> impl Iterator<Item = std::ops::Range<usize>> + 't {
+fn find_ansi_escapes(
+    input: &str,
+) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
     const ESCAPE_PREFIX: &str = "\x1B[";
     let mut last_end = 0;
     std::iter::from_fn(move || {
