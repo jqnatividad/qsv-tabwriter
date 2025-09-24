@@ -116,7 +116,7 @@ pub enum Alignment {
     /// Like Left, but adds a comment line at the top that comma-delimited
     /// enumerates the starting position of each column (Fixed Width Format).
     /// Positions are 1-indexed.
-    Leftfwf,
+    LeftFwf,
 }
 
 #[derive(Debug)]
@@ -317,7 +317,7 @@ impl<W: io::Write> io::Write for TabWriter<W> {
             std::iter::repeat_n(' ', biggest_width + self.padding).collect();
 
         // Generate comment line for Leftfwf alignment
-        if self.alignment == Alignment::Leftfwf
+        if self.alignment == Alignment::LeftFwf
             && !self.lines.is_empty()
             && !self.lines[0].is_empty()
         {
@@ -358,7 +358,7 @@ impl<W: io::Write> io::Write for TabWriter<W> {
                     {
                         Alignment::Left
                         | Alignment::LeftEndTab
-                        | Alignment::Leftfwf => (0, extra_space),
+                        | Alignment::LeftFwf => (0, extra_space),
                         Alignment::Right => (extra_space, 0),
                         Alignment::Center => {
                             (extra_space / 2, extra_space - extra_space / 2)
