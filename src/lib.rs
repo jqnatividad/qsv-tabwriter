@@ -457,7 +457,7 @@ fn generate_fwf_comment_line(
     let mut current_pos = 1; // Start with 1-indexed positions
 
     // Calculate positions for all columns
-    for &width in widths.iter() {
+    for &width in widths {
         positions.push(current_pos.to_string());
         current_pos += width + padding;
     }
@@ -484,7 +484,7 @@ fn cell_widths(lines: &[Vec<Cell>], minwidth: usize) -> Vec<Vec<usize>> {
         for col in ws[i].len()..(iline.len() - 1) {
             let mut width = minwidth;
             let mut contig_count = 0;
-            for line in lines[i..].iter() {
+            for line in &lines[i..] {
                 if col + 1 >= line.len() {
                     // ignores last column
                     break;
