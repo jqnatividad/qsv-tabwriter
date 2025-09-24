@@ -492,9 +492,8 @@ fn cell_widths(lines: &[Vec<Cell>], minwidth: usize) -> Vec<Vec<usize>> {
                 contig_count += 1;
                 width = cmp::max(width, line[col].width);
             }
-            assert!(contig_count >= 1);
-            for j in i..(i + contig_count) {
-                ws[j].push(width);
+            for line_widths in ws.iter_mut().skip(i).take(contig_count) {
+                line_widths.push(width);
             }
         }
     }
