@@ -6,7 +6,7 @@ description = "Elastic tabstops."
 documentation = "https://docs.rs/qsv-tabwriter"
 repository = "https://github.com/jqnatividad/qsv-tabwriter"
 readme = "README.md"
-keywords = ["tabs", "elastic", "aligned", "whitespace", "table", "fixed width"]
+keywords = ["tabs", "elastic", "aligned", "fixed width", "table"]
 license = "Unlicense/MIT"
 edition = "2024"
 
