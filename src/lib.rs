@@ -455,11 +455,6 @@ impl<W: io::Write> fmt::Display for IntoInnerError<W> {
 }
 
 impl<W: io::Write + ::std::any::Any> error::Error for IntoInnerError<W> {
-    #[allow(deprecated)]
-    fn description(&self) -> &str {
-        self.error().description()
-    }
-
     fn cause(&self) -> Option<&dyn error::Error> {
         Some(self.error())
     }
@@ -506,13 +501,15 @@ fn cell_widths(lines: &[Vec<Cell>], minwidth: usize) -> Vec<Vec<usize>> {
     // However, I claim that it is actually O(nm). That is, the width for
     // every contiguous column is computed exactly once.
     let mut ws: Vec<_> = (0..lines.len()).map(|_| vec![]).collect();
+    let mut width;
+    let mut contig_count;
     for (i, iline) in lines.iter().enumerate() {
         if iline.is_empty() {
             continue;
         }
         for col in ws[i].len()..(iline.len() - 1) {
-            let mut width = minwidth;
-            let mut contig_count = 0;
+            width = minwidth;
+            contig_count = 0;
             for line in &lines[i..] {
                 if col + 1 >= line.len() {
                     // ignores last column
