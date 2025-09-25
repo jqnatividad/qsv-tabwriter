@@ -12,7 +12,7 @@
 //!
 //! ```rust
 //! use std::io::Write;
-//! use tabwriter::TabWriter;
+//! use qsv_tabwriter::TabWriter;
 //!
 //! let mut tw = TabWriter::new(vec![]);
 //! write!(&mut tw, "
@@ -42,7 +42,7 @@
 //!
 //! ```rust
 //! use std::io::Write;
-//! use tabwriter::TabWriter;
+//! use qsv_tabwriter::TabWriter;
 //!
 //! let mut tw = TabWriter::new(vec![]).padding(1);
 //! write!(&mut tw, "

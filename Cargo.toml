@@ -1,15 +1,14 @@
 [package]
-name = "tabwriter"
-version = "1.4.1"  #:version
+name = "qsv-tabwriter"
+version = "2.0.0"  #:version
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 description = "Elastic tabstops."
-documentation = "https://docs.rs/tabwriter"
-homepage = "https://github.com/BurntSushi/tabwriter"
-repository = "https://github.com/BurntSushi/tabwriter"
+documentation = "https://docs.rs/qsv-tabwriter"
+repository = "https://github.com/jqnatividad/qsv-tabwriter"
 readme = "README.md"
-keywords = ["tabs", "elastic", "aligned", "whitespace", "table"]
+keywords = ["tabs", "elastic", "aligned", "whitespace", "table", "fixed width"]
 license = "Unlicense/MIT"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 unicode-width = "0.2.0"
