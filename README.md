@@ -1,10 +1,13 @@
+NOTE: qsv-tabwriter is a renamed fork of tabwriter with the following changes:
+* It implements LeftTabEnd and LeftFwf alignment
+* updated to 2024 edition
+* applied numerous clippy lint suggestions
+* is BufWriter-backed to minimize syscalls
+
 tabwriter is a crate that implements
 [elastic tabstops](http://nickgravgaard.com/elastictabstops/index.html). It
 provides both a library for wrapping Rust `Writer`s and a small program that
 exposes the same functionality at the command line.
-
-[![Build status](https://github.com/BurntSushi/tabwriter/workflows/ci/badge.svg)](https://github.com/BurntSushi/tabwriter/actions)
-[![](http://meritbadge.herokuapp.com/tabwriter)](https://crates.io/crates/tabwriter)
 
 Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org).
 
@@ -14,7 +17,7 @@ Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org).
 ```rust
 use std::io::Write;
 
-use tabwriter::TabWriter;
+use qsv_tabwriter::TabWriter;
 
 let mut tw = TabWriter::new(vec![]);
 tw.write_all(b"
@@ -35,34 +38,11 @@ The Boss           Darkness on the Edge of Town
 ");
 ```
 
-You can see an example of *real* use in my
-[CSV toolkit](https://github.com/BurntSushi/xsv/blob/master/src/cmd/table.rs#L57-L60).
-
-
-### Simple example of command line utility
-
-```bash
-[andrew@Liger tabwriter] cat sample | sed 's/   /\\t/g'
-a\tb\tc
-abc\tmnopqrstuv\txyz
-abcmnoxyz\tmore text
-
-a\tb\tc
-[andrew@Liger tabwriter] ./target/tabwriter < sample
-a          b           c
-abc        mnopqrstuv  xyz
-abcmnoxyz  more text
-
-a   b   c
-```
-
-Notice that once a column block is broken, alignment starts over again.
-
 
 ### Documentation
 
 The API is fully documented with some examples:
-[https://docs.rs/tabwriter/latest/tabwriter/](https://docs.rs/tabwriter/latest/tabwriter/).
+[https://docs.rs/qsv-tabwriter/latest/tabwriter/](https://docs.rs/qsv-tabwriter/latest/tabwriter/).
 
 
 ### Installation
@@ -72,16 +52,16 @@ This crate works with Cargo. Assuming you have Rust and
 tests:
 
 ```bash
-git clone git://github.com/BurntSushi/tabwriter
-cd tabwriter
+git clone git://github.com/jqnatividad/qsv-tabwriter
+cd qsv-tabwriter
 cargo test
 ```
 
-You can also add `tabwriter` as a dependency to your project's `Cargo.toml`:
+You can also add `qsv-tabwriter` as a dependency to your project's `Cargo.toml`:
 
 ```toml
 [dependencies]
-tabwriter = "1"
+qsv-tabwriter = "2"
 ```
 
 
@@ -96,13 +76,6 @@ it is disabled by default.)
 
 ### Minimum Rust version policy
 
-This crate's minimum supported `rustc` version is `1.67.0`.
+This crate's minimum supported `rustc` version is `1.90.0`.
 
-The current policy is that the minimum Rust version required to use this crate
-can be increased in minor version updates. For example, if `crate 1.0` requires
-Rust 1.20.0, then `crate 1.0.z` for all values of `z` will also require Rust
-1.20.0 or newer. However, `crate 1.y` for `y > 0` may require a newer minimum
-version of Rust.
-
-In general, this crate will be conservative with respect to the minimum
-supported version of Rust.
+The current policy is to use the latest Rust stable.
